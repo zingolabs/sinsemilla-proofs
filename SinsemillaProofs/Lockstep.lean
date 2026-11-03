@@ -36,48 +36,34 @@ def laneStep (lane addend : Point Fp) (doubledX : Fp) : Option (Point Fp) :=
 private theorem two_nsmul_eq_add_self (T : Point Fp) : (2 : ℕ) • T = T + T := by
   simp only [Point.nsmul_def, ShortWeierstrass.smul, ShortWeierstrass.zero_add, Point.add_def]
 
-/-- A lockstep lane computes `weightedStep` (no group facts: `ShortWeierstrass.add` branches
-line up, `y ≠ ty` with same `x` on-curve ⇒ `y = −ty` ⇒ `P + T = 𝒪`) -/
+/-- A lockstep lane computes `weightedStep`: `ShortWeierstrass.add` branches line up; shared `x`
+⇒ `T = ±P` (`x_eq_iff_eq_or_eq_neg`), `P + P ≠ 𝒪` (`two_pow_nsmul_onCurve`) -/
 theorem laneStep_eq_weightedStep {P T : Point Fp} (hP : P.OnCurve) (hT : T.OnCurve) :
     laneStep P T ((2 : ℕ) • T).x = weightedStep P T := by
   have hP0 : P ≠ 0 := Point.ne_zero_of_onCurve hP
   have hT0 : T ≠ 0 := Point.ne_zero_of_onCurve hT
   unfold laneStep weightedStep
   by_cases hD : P.x = ((2 : ℕ) • T).x
-  · simp only [hD, true_or, if_true]
+  · rw [if_pos hD, if_pos (.inl hD)]
   simp only [hD, false_or, if_false]
   by_cases hx : P.x = T.x
-  · have hTx : T.x ≠ 0 := fun h => Point.no_onCurve_of_x_zero T.y (by rwa [← h])
-    have hTy : T.y ≠ 0 := Point.y_ne_zero_of_valid_of_x_ne_zero (.inl hT) hTx
-    have hPx : P.x ≠ 0 := hx ▸ hTx
-    obtain ⟨x, y⟩ := P
-    obtain ⟨tx, ty⟩ := T
-    simp only at hx hPx hTx hTy
-    subst hx
-    simp only [ne_eq, not_true_eq_false, if_false]
-    have hP0' : ¬ (x, y) = (0, 0) := by simpa [Point.zero_def] using hP0
-    rcases Point.y_eq_or_neg_of_same_x (.inl hT) (.inl hP) hTx hPx rfl with hy | hy
-    · -- `P = T`: tangent branch, `[2]T ≠ 𝒪` from `two_pow_nsmul_onCurve`
-      subst hy
-      have h2 : (⟨x, y⟩ : Point Fp) + ⟨x, y⟩ ≠ 0 :=
-        two_nsmul_eq_add_self _ ▸ Point.ne_zero_of_onCurve (two_pow_nsmul_onCurve hT 1)
-      simp only [if_true, h2, if_false]
-      congr 1
-      rw [Point.add_def, ShortWeierstrass.add, Point.coords, if_neg hP0', if_neg hP0', if_pos rfl,
-        if_neg (add_self_ne_zero hTy)]
-      simp only [pallasA, add_zero, Point.ofCoords]
-    · -- `P = −T`: both ⊥
-      subst hy
-      have hne : -ty ≠ ty := fun h => add_self_ne_zero hTy (by linear_combination -h)
-      have h0 : (⟨x, -ty⟩ : Point Fp) + ⟨x, ty⟩ = 0 := by
-        rw [Point.add_def, ShortWeierstrass.add, Point.coords, Point.coords, if_neg hP0',
-          if_neg (by simpa [Point.zero_def] using hT0), if_pos rfl, if_pos (by ring)]
-        rfl
-      simp only [hne, h0, if_false, if_true]
+  · have hPx : P.x ≠ 0 := fun h => Point.no_onCurve_of_x_zero P.y (by rwa [← h])
+    have hyy : P.y + P.y ≠ 0 :=
+      add_self_ne_zero (Point.y_ne_zero_of_valid_of_x_ne_zero (.inl hP) hPx)
+    rcases (x_eq_iff_eq_or_eq_neg hT hP).mp hx.symm with h | h <;> subst T
+    · -- `T = P`: tangent branch
+      have h2 : P + P ≠ 0 :=
+        two_nsmul_eq_add_self P ▸ Point.ne_zero_of_onCurve (two_pow_nsmul_onCurve hP 1)
+      rw [if_neg h2]
+      simp only [ne_eq, not_true_eq_false, if_false, if_true, Point.add_def, ShortWeierstrass.add,
+        Point.coords, Prod.mk.injEq, hPx, false_and, hyy, pallasA, add_zero, Point.ofCoords]
+    · -- `T = −P`: both ⊥ (`ShortWeierstrass.add_neg`)
+      have h0 : P + -P = 0 := congrArg Point.ofCoords (ShortWeierstrass.add_neg pallasA P.coords)
+      have hne : ¬ P.y = -P.y := fun h => hyy (by linear_combination h)
+      simp only [Point.neg_x, Point.neg_y, ne_eq, not_true_eq_false, if_false, hne, h0, if_true]
   · have hsum : P + T ≠ 0 := Point.nondegenerateAdd_eq_add hP0 hT0 hx ▸
       Point.ne_zero_of_onCurve (Point.nondegenerateAdd_onCurve hP hT hx)
-    simp only [hx, ne_eq, not_false_eq_true, if_true, hsum, if_false]
-    rw [← Point.nondegenerateAdd_eq_add hP0 hT0 hx]
+    rw [if_pos hx, if_neg hsum, ← Point.nondegenerateAdd_eq_add hP0 hT0 hx]
     simp only [Point.nondegenerateAdd, div_eq_mul_inv, sq]
 
 /-- Rust's fused Montgomery trick over the live lanes' denominators, in order
@@ -99,10 +85,9 @@ theorem batchInverses_go {before : Fp} (hb : before ≠ 0) {ds : List Fp}
   induction ds generalizing before with
   | nil => rfl
   | cons d ds ih =>
-    have hd : d ≠ 0 := h d List.mem_cons_self
-    rw [batchInverses.go, ih (mul_ne_zero hb hd) fun e he => h e (List.mem_cons_of_mem d he)]
-    simp only [List.map_cons, mul_inv, inv_mul_cancel_right₀ hd, mul_right_comm before⁻¹,
-      inv_mul_cancel₀ hb, one_mul]
+    obtain ⟨hd, h⟩ := List.forall_mem_cons.mp h
+    simp only [batchInverses.go, ih (mul_ne_zero hb hd) h, List.map_cons, mul_inv,
+      inv_mul_cancel_right₀ hd, mul_right_comm before⁻¹, inv_mul_cancel₀ hb, one_mul]
 
 /-- Each live lane receives its own denominator's inverse -/
 theorem batchInverses_eq {ds : List Fp} (h : ∀ d ∈ ds, d ≠ 0) :
