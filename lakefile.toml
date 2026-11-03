@@ -1,0 +1,22 @@
+name = "SinsemillaProofs"
+version = "0.1.0"
+defaultTargets = ["SinsemillaProofs"]
+
+[leanOptions]
+pp.unicode.fun = true
+autoImplicit = false
+
+# Ironwood: the spec-level Sinsemilla (`hashToPoint`, its break data) and the Pallas group
+[[require]]
+name = "Zcash"
+git = "https://github.com/daira/ironwood"
+rev = "86e3c7026db8c9af27ca731e6b5c7f2d8fc7f0fc"
+
+[[require]]
+name = "mathlib"
+scope = "leanprover-community"
+rev = "v4.30.0"
+
+[[lean_lib]]
+name = "SinsemillaProofs"
+globs = ["SinsemillaProofs", "SinsemillaProofs.+"]
