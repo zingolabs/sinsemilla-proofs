@@ -1,0 +1,19 @@
+[files]
+# Licence texts and the pinned manifest are not spell-checked.
+extend-exclude = [
+  "*.json",
+  "LICENSE-*",
+]
+
+[default]
+# Lean proofs use many short hypothesis names (`hx`, `hne`, `ih`, etc.) that the spell-checker
+# misreads as typos. Skip identifiers of three or fewer characters rather than whitelisting each one;
+# genuine typos that short are vanishingly rare and not worth the steady stream of false positives.
+extend-ignore-identifiers-re = [
+  "^[A-Za-z0-9_]{1,3}$",
+  # Git revisions are opaque hexadecimal identifiers, not prose.
+  "^[0-9a-f]{8,40}$",
+]
+
+[default.extend-words]
+madd = "madd"  # `madd-2007-bl`, the Explicit-Formulas Database name of the mixed-addition formula

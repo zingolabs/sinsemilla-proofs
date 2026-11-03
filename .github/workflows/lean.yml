@@ -1,0 +1,47 @@
+name: Lean
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
+permissions: {}
+
+jobs:
+  build:
+    name: Build the Sinsemilla proofs
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          persist-credentials: false
+      # No Lean file may import the Mathlib umbrella modules: `import Mathlib` peaks around
+      # 6.5 GB RSS per Lean process, and `import Mathlib.Tactic` costs ~+1.6 s import-load
+      # and ~+1.3 GB RSS per process over the narrow tactic modules (ironwood#153). Nothing
+      # else fails when either creeps back in — builds just quietly get slow again.
+      - name: Verify no Mathlib umbrella imports
+        run: scripts/check_no_umbrella_imports.sh
+      # Every module file must be reachable from the lakefile's defaultTargets — a module
+      # outside that set is not elaborated at all, and nothing else fails when one falls out.
+      # The script also asserts that the target list below equals `defaultTargets` as a set.
+      - name: Verify build coverage of every module
+        run: scripts/check_build_coverage.sh
+      # Installs the toolchain from lean-toolchain, fetches the Mathlib olean cache, and runs
+      # `lake build --wfail <targets>`, which rejects all warnings (so a `sorry` anywhere fails
+      # CI, census entry or not). The targets are named explicitly rather than left to the
+      # lakefile's `defaultTargets`, so CI's build surface is pinned here: dropping a check
+      # library from the lakefile cannot silently shrink what CI builds without a visible diff
+      # in this workflow.
+      #
+      # `SinsemillaProofs` is the library, whose root imports the axiom census `TrustBoundary`.
+      # `SmokeCheck` runs the `#guard` evaluations under `SinsemillaProofs/Tests/`, kept out of
+      # the library's import graph.
+      - uses: leanprover/lean-action@38fbc41a8c28c4cbaec22d7f7de508ec2e7c0dd9 # v1.5.0
+        with:
+          build-args: "--wfail SinsemillaProofs SmokeCheck"

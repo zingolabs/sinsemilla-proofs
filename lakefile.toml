@@ -1,22 +1,44 @@
 name = "SinsemillaProofs"
 version = "0.1.0"
-defaultTargets = ["SinsemillaProofs"]
+keywords = ["cryptography", "math", "protocols"]
+defaultTargets = ["SinsemillaProofs", "SmokeCheck"]
 
 [leanOptions]
-pp.unicode.fun = true
+pp.unicode.fun = true # pretty-prints `fun a ↦ b`
 autoImplicit = false
 
-# Ironwood: the spec-level Sinsemilla (`hashToPoint`, its break data) and the Pallas group
 [[require]]
 name = "Zcash"
 git = "https://github.com/daira/ironwood"
+# Ironwood main at 2026-09-08, the rev whose `Zcash.Circuits.Specs.Sinsemilla` and
+# `SinsemillaBreak` these proofs are stated against (and whose `Zcash.Meta.AxiomCheck` the census
+# uses). It pins CompElliptic, Clean and CompPoly transitively.
 rev = "86e3c7026db8c9af27ca731e6b5c7f2d8fc7f0fc"
 
+# mathlib last, so that its pinned versions of the common transitive dependencies
+# (batteries, aesop, Qq, proofwidgets, ...) take precedence over CompPoly's.
 [[require]]
 name = "mathlib"
 scope = "leanprover-community"
 rev = "v4.30.0"
 
+# `SinsemillaProofs.lean` is this library's only import root, so the root glob alone builds exactly
+# its transitive closure: the three proof modules and the census in `TrustBoundary`, which imports
+# them. The glob is the root module only, not `SinsemillaProofs.+`: a subtree glob would also pull
+# `SinsemillaProofs/Tests/` into the production library, which is exactly what the `SmokeCheck`
+# target below exists to keep out. A new proof module therefore has to be imported from the root
+# (or from the census) to be built at all; `scripts/check_build_coverage.sh` (CI) asserts that
+# every module file in the package is reachable from some default target, so one that is not
+# fails CI rather than silently going unelaborated.
 [[lean_lib]]
 name = "SinsemillaProofs"
-globs = ["SinsemillaProofs", "SinsemillaProofs.+"]
+globs = ["SinsemillaProofs"]
+
+# `SinsemillaProofs/Tests/Smoke.lean` — `#guard` evaluations of the evaluators on concrete points,
+# the empirical complement of the theorems. A check module is where a `#guard` stated too weakly is
+# least likely to draw review, so it does not belong in the production `SinsemillaProofs` import
+# graph that downstream users get; this target keeps the default build (what CI runs) running it.
+# The glob covers the whole directory, so a newly added check cannot land in no target at all.
+[[lean_lib]]
+name = "SmokeCheck"
+globs = ["SinsemillaProofs.Tests.+"]
