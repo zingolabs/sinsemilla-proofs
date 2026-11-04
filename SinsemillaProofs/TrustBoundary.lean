@@ -10,14 +10,14 @@ The census that makes this repository's trust claims build-time checks rather th
 `assert_axioms` below pins an *upper bound* on a theorem's trusted base, so a change that widens
 it — a `sorry` reached through some dependency, an unexpected axiom, or `native_decide` where none
 was permitted — fails this file rather than passing silently. The command is Ironwood's
-(`Zcash.Meta.AxiomCheck`), usable here because the package already depends on `Zcash`; it accepts
-a downstream package without change, since its compiled-body sweep classifies modules by name root
-and this repository owns no `@[implemented_by]` or `@[extern]` declaration.
+(`Zcash.Meta.AxiomCheck`), usable here because the package already depends on `Zcash`. It accepts
+a downstream package without change: its compiled-body sweep classifies modules by name root, and
+this repository owns no `@[implemented_by]` or `@[extern]` declaration.
 
 Two tiers appear. General theorems rest only on `propext` / `Classical.choice` / `Quot.sound`.
 The results that go through the Pallas group order additionally inherit one compiler-trusted
 closed fact, CompElliptic's point-count witness `Pallas.q_nsmul_Gpt`, through
-`Zcash.Circuits.Point.addOrderOf_eq`: `[2^k]` is injective and never lands on `𝒪` because
+`Zcash.Circuits.Point.addOrderOf_eq`: `(2^k) •` is injective and never lands on `𝒪` because
 `q ∤ 2^k`, which needs `q` to be the group order. Each such entry names that owner in
 `+native(...)`, and the owner list must be exact, so a certificate entering or leaving a cone fails
 the build with the list to write. Nothing in this repository uses `native_decide` itself.

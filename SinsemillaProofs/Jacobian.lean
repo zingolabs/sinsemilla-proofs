@@ -6,14 +6,8 @@ import Mathlib.Tactic.Ring
 /-!
 # The Jacobian accumulator step
 
-References:
-- `sinsemilla` crate at `elicbarbieri/sinsemilla` commit `6899b8643e48a935b276359434358d9b1ee1989a`
-  (branch `perf/hash-many-vartime`), file `src/table.rs` (`Jacobian::step`,
-  `TableDomain::hash_each_vartime`)
-- Bernstein and Lange, Explicit-Formulas Database, `madd-2007-bl` (Jacobian mixed addition)
-
 Below `LOCKSTEP_LANES` messages, `TableDomain::hash_each_vartime` keeps one Jacobian accumulator
-per message and normalises all of them with one shared inversion at the end. `Jacobian::step` adds
+per message and normalizes all of them with one shared inversion at the end. `Jacobian::step` adds
 one affine table entry by `madd-2007-bl` after two tests on the raw coordinates: the `has_x_of`
 test `X = doubled.x · Z²`, which is the rescaled `±` conditions, and `h = 0`, i.e.
 `X = addend.x · Z²`. `jacobianStep` is that function on `(X, Y, Z)` for the affine
@@ -21,12 +15,21 @@ test `X = doubled.x · Z²`, which is the rescaled `±` conditions, and `h = 0`,
 
 The step is sound, and complete for `⊥`, but its `none` is strictly larger than `⊥`: `h = 0` also
 fires when the affine view *equals* the addend, which the specification treats as an ordinary
-doubling. The Rust does not distinguish the two cases; on any `none` it reruns the whole message
+doubling. The Rust does not distinguish the two cases. On any `none` it reruns the whole message
 through `TableDomain::hash_to_point`, which is `weightedHashToPoint` and so, by
 `weightedHashToPoint_eq_hashToPoint`, the specification. A `FIRST_STEPS` entry of `None` makes the
 accumulator `None` and takes the same fallback. The soundness theorems therefore carry `Z ≠ 0` as
 an invariant and state the affine view against `weightedStep`, and `jacobianStep_eq_none_iff` says
-exactly which steps are handed back.
+which steps are handed back.
+
+## References
+
+- `sinsemilla` crate, zcash/sinsemilla#9 head `596e662ebf917edd3bfe0b0d0f1a5d984969e393`, as
+  carried by `elicbarbieri/sinsemilla` at `6899b8643e48a935b276359434358d9b1ee1989a` (branch
+  `perf/hash-many-vartime`), file `src/table.rs` (`Jacobian::step`,
+  `TableDomain::hash_each_vartime`)
+- Bernstein–Lange, Explicit-Formulas Database, `madd-2007-bl` (Jacobian coordinates, `a = 0`):
+  <https://www.hyperelliptic.org/EFD/g1p/auto-shortw-jacobian-0.html#addition-madd-2007-bl>
 -/
 
 namespace SinsemillaProofs
@@ -34,8 +37,7 @@ namespace SinsemillaProofs
 open Zcash.Circuits
 
 /-- A Pallas point in Jacobian coordinates, `(X, Y, Z)` for the affine `(X / Z², Y / Z³)`. The Rust
-never holds the identity in this form; the theorems carry `Z ≠ 0` as a hypothesis rather than
-bundling it into the type. -/
+never holds the identity in this form, so the theorems carry `Z ≠ 0` as a hypothesis. -/
 structure JacobianPoint where
   X : Fp
   Y : Fp
@@ -61,8 +63,8 @@ def jacobianStep (p : JacobianPoint) (addend doubled : Point Fp) : Option Jacobi
       let x := r ^ 2 - j - 2 * v
       some ⟨x, r * (v - x) - 2 * (p.Y * j), (p.Z + h) ^ 2 - zz - hh⟩
 
-/-- Exactly which steps are handed back: those with `x(P) = x([2]T)`, which is `⊥`, or with
-`x(P) = x(T)`, which is `⊥` at `P = −T` and a doubling at `P = T`. -/
+/-- Which steps are handed back, for `Z ≠ 0`: those with `x(P) = x(2 • T)`, which is `⊥`, and
+those with `x(P) = x(T)`, which is `⊥` at `P = −T` and a doubling at `P = T`. -/
 theorem jacobianStep_eq_none_iff {p : JacobianPoint} {T : Point Fp} (hZ : p.Z ≠ 0) :
     jacobianStep p T ((2 : ℕ) • T) = none ↔
       p.affine.x = ((2 : ℕ) • T).x ∨ p.affine.x = T.x := by
@@ -70,14 +72,13 @@ theorem jacobianStep_eq_none_iff {p : JacobianPoint} {T : Point Fp} (hZ : p.Z �
     sub_eq_zero.trans eq_comm]
   split_ifs <;> simp [*]
 
-/-- Both soundness facts at once, since they come from the same reparametrisation of `X` by
-`h = T.x·Z² − X` (every `madd-2007-bl` denominator is a power of `2·Z·h`); the exported statements
-are the projections `jacobianStep_Z_ne_zero` and `affine_jacobianStep`. -/
+/-- Both soundness facts at once, from one reparameterization of `X` stepped through in the body;
+the exported statements are the projections `jacobianStep_Z_ne_zero` and `affine_jacobianStep`. -/
 private theorem jacobianStep_sound {p p' : JacobianPoint} {T : Point Fp} (hZ : p.Z ≠ 0)
     (hP : p.affine.OnCurve) (hT : T.OnCurve) (h : jacobianStep p T ((2 : ℕ) • T) = some p') :
     p'.Z ≠ 0 ∧ weightedStep p.affine T = some p'.affine := by
   obtain ⟨X, Y, Z⟩ := p
-  -- reparametrise `X` by `h = T.x·Z² − X` (every madd-2007-bl denominator = power of `2·Z·h`)
+  -- reparameterize `X` by `h = T.x·Z² − X` (every madd-2007-bl denominator = power of `2·Z·h`)
   obtain ⟨h', rfl⟩ : ∃ h', X = T.x * Z ^ 2 - h' := ⟨T.x * Z ^ 2 - X, by ring⟩
   simp only [jacobianStep, sub_sub_cancel] at h
   split_ifs at h with h1 h2

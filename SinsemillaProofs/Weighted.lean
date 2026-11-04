@@ -5,40 +5,43 @@ import Mathlib.Tactic.NormNum
 /-!
 # Position-weighted Sinsemilla as the specification's `hashToPoint`
 
-References:
-- Zcash protocol specification §5.4.1.9 (`SinsemillaHashToPoint`) and Theorem 5.4.4 (when the
-  incomplete additions along the hash chain are defined)
-- `sinsemilla` crate at `elicbarbieri/sinsemilla` commit `6899b8643e48a935b276359434358d9b1ee1989a`
-  (branch `perf/hash-many-vartime`: zcash/sinsemilla#9 head `596e662` plus four commits), file
-  `src/table.rs` (`TableDomain::hash_to_point`, `FIRST_STEPS`)
+The `sinsemilla` crate's table evaluator never forms the specification's accumulators `Accᵢ`.
+For an `n`-word message it keeps the position-weighted prefix `Pᵢ = (2^(n−i)) • Accᵢ`, starting
+from `P₀ = (2^n) • Q` (`starts[d][n−1]`) and adding one table entry `Tᵢ = (2^(n−1−i)) • S(mᵢ)`
+(`generators[n−1−i][mᵢ]`) per word, so each position costs one addition. This module models that
+evaluator at the group level, with the table rows as the multiples `(2^w) • S m` of an arbitrary
+generator map `S : ℕ → Point Fp`, and proves it equal to Ironwood's `hashToPoint` as a function,
+`⊥` included. The `K`-bit groups of a message are words, the term the specification and halo2 use.
+
+## The exceptional cases
+
+Theorem 5.4.4 makes the specification's step `⊥` at `Acc = ±S(m)` and at `2 • Acc + S(m) = 𝒪`.
+Scaling by `(2^(n−i)) •` turns the first pair into `P = ±(2 • T)`, one `x`-coordinate test
+against the entry one weight up (`has_x_of` against `generators[n−i][m]`), and the third into
+`P + T = 𝒪` (`acc.is_identity()`). The Rust keeps a sticky `exceptional` flag and lets the sum run
+on; `Option.bind` stops at the first `⊥`. The two agree as functions.
+
+## Statement form and scope
+
+`weightedStep` is stated in the specification's `⊥`-model (`Option`, `none` for `⊥`). Break data
+stays the job of Ironwood's Σ-refinement `hashToPointB`, and
+`weightedHashToPoint_eq_getLeft?_hashToPointB` records the join with it. Not modeled: the table
+contents (that `generators[w][j]` is `(2^w) • S(j)` and `starts[d][n−1]` is `(2^n) • Q`, tested in
+the crate against group hashing), the packing of message bits into words with the `< 2^K`
+assertion on each, and the correspondence between the Rust and this model, which the crate's
+differential tests pin from both sides.
+
+## References
+
+- Zcash protocol specification, §5.4.1.9 Sinsemilla hash function
+  (<https://zips.z.cash/protocol/protocol.pdf#concretesinsemillahash>) and its Theorem 5.4.4
+  (when the incomplete additions along the hash chain are defined)
+- `sinsemilla` crate, zcash/sinsemilla#9 head `596e662ebf917edd3bfe0b0d0f1a5d984969e393`, as
+  carried by `elicbarbieri/sinsemilla` at `6899b8643e48a935b276359434358d9b1ee1989a` (branch
+  `perf/hash-many-vartime`, four commits on that head), file `src/table.rs`
+  (`TableDomain::hash_to_point`, `FIRST_STEPS`)
 - Ironwood at `86e3c7026db8c9af27ca731e6b5c7f2d8fc7f0fc`, modules `Zcash.Circuits.Specs.Sinsemilla`
   (`hashToPoint`, `step`) and `Zcash.Circuits.Specs.SinsemillaBreak` (`hashToPointB`)
-
-The table evaluator never forms the specification's accumulators `Accᵢ`. For an `n`-word message
-it keeps the position-weighted prefix `Pᵢ = [2^(n−i)] Accᵢ`, starting from `P₀ = [2ⁿ] Q`
-(`starts[d][n−1]`) and adding one table entry `Tᵢ = [2^(n−1−i)] S(mᵢ)` (`generators[n−1−i][mᵢ]`)
-per word, so the doubling inside each specification step is absorbed into the weights and every
-position costs one addition. This module models that at the group level: the table rows are the
-multiples `[2^w] S m` of an arbitrary generator map `S : ℕ → Point Fp`, and the start table is
-`[2ⁿ] Q`. The `K`-bit groups of a message are words, the term the specification and halo2 use.
-
-The exceptional cases are the specification's, rescaled. Theorem 5.4.4 makes the step `⊥` exactly
-when `Acc = ±S(m)` or `[2]Acc + S(m) = 𝒪`. Multiplying through by `[2^(n−i)]` turns the first pair
-into `P = ±[2]T`, a single `x`-coordinate test against the entry one weight up (`has_x_of` against
-`generators[n−i][m]`), and the third into `P + T = 𝒪` (`acc.is_identity()`). The Rust keeps a
-sticky `exceptional` flag and lets the sum run on; `Option.bind` stops at the first `⊥`. The two
-agree as functions, which is all the theorems claim.
-
-`weightedStep` is stated in the specification's literal `⊥`-model (`Option`, `none` for `⊥`) and
-not as a Σ-refinement of the kind `hashToPointB` is. The exported results are equalities of
-`Option`-valued functions against `hashToPoint`, which is the form Ironwood requires of exported
-statements, and break data stays `hashToPointB`'s job; the corollary
-`weightedHashToPoint_eq_getLeft?_hashToPointB` records the join with that refinement.
-
-Out of scope, by design: the contents of the tables (that `generators[w][j]` is `[2^w] S(j)` and
-`starts[d][n−1]` is `[2ⁿ] Q` is tested in the crate against group hashing, not proved here), the
-packing of message bits into words and the `< 2^K` assertion on each, and the correspondence
-between the Rust and this model, which the crate's differential tests pin from both sides.
 -/
 
 namespace SinsemillaProofs
@@ -48,19 +51,20 @@ open Zcash.Circuits.Specs.Sinsemilla
 open CompElliptic.Fields.Pasta (PALLAS_SCALAR_CARD PALLAS_SCALAR_is_prime)
 
 /-- One weighted position, the loop body of `TableDomain::hash_to_point`: `P + T`, or `⊥` when
-`P.x = ([2]T).x` (on-curve, `P = ±[2]T`) or `P + T = 𝒪`. The identity never reaches this test as
-`P`, since the previous position was already `⊥`. -/
+`P.x = (2 • T).x` (on-curve, `P = ±(2 • T)`) or `P + T = 𝒪`. The identity never reaches this test
+as `P`, since the previous position was already `⊥`. -/
 def weightedStep (P T : Point Fp) : Option (Point Fp) :=
   if P.x = ((2 : ℕ) • T).x ∨ P + T = 0 then none else some (P + T)
 
-/-- The weighted chain from `P` with the words `ms` still to hash: the position with `ms` remaining
-adds `T = [2^|ms|] S m` (`generators[n−1−i][m]`) and tests against `[2]T` (`generators[n−i][m]`). -/
+/-- The weighted chain from `P` with the words `ms` still to hash: the position with `ms`
+remaining adds `T = (2^|ms|) • S m` (`generators[n−1−i][m]`) and tests against `2 • T`
+(`generators[n−i][m]`). -/
 def weightedFrom (S : ℕ → Point Fp) : Point Fp → List ℕ → Option (Point Fp)
   | P, [] => some P
   | P, m :: ms =>
     (weightedStep P ((2 ^ ms.length : ℕ) • S m)).bind fun acc => weightedFrom S acc ms
 
-/-- Position-weighted `SinsemillaHashToPoint`: start at `[2ⁿ] Q` (`starts[d][n−1]`) and add one
+/-- Position-weighted `SinsemillaHashToPoint`: start at `(2^n) • Q` (`starts[d][n−1]`) and add one
 weighted generator per word. -/
 def weightedHashToPoint (S : ℕ → Point Fp) (Q : Point Fp) (words : List ℕ) :
     Option (Point Fp) :=
@@ -68,16 +72,17 @@ def weightedHashToPoint (S : ℕ → Point Fp) (Q : Point Fp) (words : List ℕ)
 
 /-! ## Pallas group facts
 
-The group has odd prime order `q`, so `[2^k]` is injective and never lands on the identity. Every
-transport to `SWPoint` below is the same three moves: `Point.ext_toSW_iff` with both sides'
-validity, `toSW` pushed through `+`, `−`, `•` and `𝒪` by `simp only [Point.toSW_*]`, then the
+The group has odd prime order `q`, so `(2^k) •` is injective and never lands on the identity. Each
+transport to `SWPoint` in this section is the same three moves: `Point.ext_toSW_iff` with both
+sides' validity, the `Point.toSW_*` lemmas to push `toSW` through `+`, `−`, `•` and `𝒪`, then the
 group law in `SWPoint`. -/
 
+/-- `q ∤ 2^k`: the Pallas order is an odd prime, so scaling by `(2^k) •` loses no information. -/
 theorem not_dvd_two_pow (k : ℕ) : ¬ PALLAS_SCALAR_CARD ∣ 2 ^ k := fun h =>
   absurd (Nat.le_of_dvd two_pos (PALLAS_SCALAR_is_prime.dvd_of_dvd_pow h))
     (by norm_num [PALLAS_SCALAR_CARD])
 
-/-- `[2^k]` is injective on valid points: `q ∤ 2^k`, so `[2^k](A − B) = 𝒪` forces `A = B`. -/
+/-- `(2^k) •` is injective on valid points: `q ∤ 2^k`, so `(2^k) • (A − B) = 𝒪` forces `A = B`. -/
 theorem two_pow_nsmul_inj {A B : Point Fp} (hA : A.Valid) (hB : B.Valid) (k : ℕ) :
     (2 ^ k : ℕ) • A = (2 ^ k : ℕ) • B ↔ A = B := by
   rw [Point.ext_toSW_iff (Point.valid_nsmul hA _) (Point.valid_nsmul hB _), Point.toSW_nsmul hA,
@@ -86,11 +91,13 @@ theorem two_pow_nsmul_inj {A B : Point Fp} (hA : A.Valid) (hB : B.Valid) (k : �
   rw [← Point.addOrderOf_eq (sub_ne_zero.mpr hne), addOrderOf_dvd_iff_nsmul_eq_zero, nsmul_sub, h,
     sub_self]
 
+/-- `(2^k) • A` stays on the curve for on-curve `A`: `q ∤ 2^k` keeps it away from the identity. -/
 theorem two_pow_nsmul_onCurve {A : Point Fp} (hA : A.OnCurve) (k : ℕ) :
     ((2 ^ k : ℕ) • A).OnCurve :=
   Point.onCurve_of_valid_of_ne_zero (Point.valid_nsmul (.inl hA) _)
     ((Point.nsmul_eq_zero_iff hA _).not.mpr (not_dvd_two_pow k))
 
+/-- `•` distributes over `+` on valid points, transported from the group law in `SWPoint`. -/
 theorem nsmul_add_of_valid {A B : Point Fp} (hA : A.Valid) (hB : B.Valid) (k : ℕ) :
     k • (A + B) = k • A + k • B := by
   rw [Point.ext_toSW_iff (Point.valid_nsmul (Point.valid_add hA hB) k)
@@ -98,35 +105,44 @@ theorem nsmul_add_of_valid {A B : Point Fp} (hA : A.Valid) (hB : B.Valid) (k : �
   simp only [Point.toSW_nsmul, Point.toSW_add, Point.valid_add, Point.valid_nsmul, hA, hB,
     nsmul_add]
 
+/-- `•` commutes with negation on valid points, transported from the group law in `SWPoint`. -/
 theorem nsmul_neg_of_valid {A : Point Fp} (hA : A.Valid) (k : ℕ) : k • (-A) = -(k • A) := by
   rw [Point.ext_toSW_iff (Point.valid_nsmul (Point.valid_neg hA) k)
     (Point.valid_neg (Point.valid_nsmul hA k))]
   simp only [Point.toSW_nsmul, Point.toSW_neg, Point.valid_neg, Point.valid_nsmul, hA, neg_nsmul]
 
+/-- Every multiple of the identity is the identity. -/
 private theorem nsmul_zero_point (n : ℕ) : n • (0 : Point Fp) = 0 := by
   rw [Point.ext_toSW_iff (Point.valid_nsmul Point.valid_zero n) Point.valid_zero]
   simp only [Point.toSW_nsmul, Point.toSW_zero, Point.valid_zero, nsmul_zero]
 
+/-- Nested multiples compose on valid points: `a • (b • A) = (b * a) • A`. -/
 private theorem nsmul_nsmul_of_valid {A : Point Fp} (hA : A.Valid) (a b : ℕ) :
     a • (b • A) = (b * a) • A := by
   rw [Point.ext_toSW_iff (Point.valid_nsmul (Point.valid_nsmul hA b) a) (Point.valid_nsmul hA _)]
   simp only [Point.toSW_nsmul, Point.valid_nsmul, hA, mul_nsmul]
 
+/-- Doubling then scaling by `2^k` is scaling by `2^(k + 1)`: how a weighted position absorbs the
+specification's doubling. -/
 theorem two_pow_nsmul_two_nsmul {A : Point Fp} (hA : A.Valid) (k : ℕ) :
     (2 ^ k : ℕ) • ((2 : ℕ) • A) = (2 ^ (k + 1) : ℕ) • A := by
   rw [nsmul_nsmul_of_valid hA, pow_succ']
 
+/-- `A + B = 𝒪 ↔ A = −B` on valid points; turns the `sumZero` escape into a sign condition. -/
 private theorem add_eq_zero_iff_eq_neg_of_valid {A B : Point Fp} (hA : A.Valid) (hB : B.Valid) :
     A + B = 0 ↔ A = -B := by
   rw [Point.ext_toSW_iff (Point.valid_add hA hB) Point.valid_zero,
     Point.ext_toSW_iff hA (Point.valid_neg hB)]
   simp only [Point.toSW_add, Point.toSW_neg, Point.toSW_zero, hA, hB, add_eq_zero_iff_eq_neg]
 
+/-- `A + B = A ↔ B = 𝒪` on valid points; rules out one arm of the `doubleCollision` escape. -/
 private theorem add_eq_left_iff_of_valid {A B : Point Fp} (hA : A.Valid) (hB : B.Valid) :
     A + B = A ↔ B = 0 := by
   rw [Point.ext_toSW_iff (Point.valid_add hA hB) hA, Point.ext_toSW_iff hB Point.valid_zero]
   simp only [Point.toSW_add, Point.toSW_zero, hA, hB, add_eq_left]
 
+/-- `(A + B) + A = 2 • A + B`: the specification's two incomplete additions as a doubling and an
+addition. -/
 private theorem add_add_self_of_valid {A B : Point Fp} (hA : A.Valid) (hB : B.Valid) :
     A + B + A = (2 : ℕ) • A + B := by
   rw [Point.ext_toSW_iff (Point.valid_add (Point.valid_add hA hB) hA)
@@ -142,10 +158,10 @@ theorem x_eq_iff_eq_or_eq_neg {P X : Point Fp} (hP : P.OnCurve) (hX : X.OnCurve)
 
 /-! ## One position -/
 
-/-- **Theorem 5.4.4, as a computation**: on-curve, the specification's step is `[2]acc + S m`, and
-`⊥` exactly at `acc = S m`, `acc = −S m`, or `[2]acc + S m = 𝒪`. `incompleteAdd`'s `sumZero`
-escape (`acc + S m = 𝒪`) is subsumed by `acc = −S m`, and its `doubleCollision` escape is the third
-disjunct. -/
+/-- **Theorem 5.4.4, as a computation**: on-curve, the specification's step is `2 • acc + S m`,
+and `⊥` at `acc = S m`, `acc = −S m` and `2 • acc + S m = 𝒪` and nowhere else. `incompleteAdd`'s
+`sumZero` escape (`acc + S m = 𝒪`) is subsumed by `acc = −S m`, and its `doubleCollision` escape is
+the third disjunct. -/
 theorem step_eq_of_onCurve {S : ℕ → Point Fp} {m : ℕ} {acc : Point Fp} (hAcc : acc.OnCurve)
     (hS : (S m).OnCurve) :
     step S m acc =
@@ -173,6 +189,8 @@ theorem step_eq_of_onCurve {S : ℕ → Point Fp} {m : ℕ} {acc : Point Fp} (hA
   simp only [Point.incompleteAdd_def, hAcc0, hS0, hx, hT0, hx2, hne, or_false, false_or, if_false,
     Point.bot_eq_none, Option.bind_some, hsum]
 
+/-- A defined specification step stays on the curve; this keeps the chain's induction
+hypothesis. -/
 theorem step_onCurve {S : ℕ → Point Fp} {m : ℕ} {acc B : Point Fp} (hAcc : acc.OnCurve)
     (hS : (S m).OnCurve) (h : step S m acc = some B) : B.OnCurve := by
   rw [step_eq_of_onCurve hAcc hS, Option.ite_none_left_eq_some, Option.some.injEq] at h
@@ -180,7 +198,8 @@ theorem step_onCurve {S : ℕ → Point Fp} {m : ℕ} {acc B : Point Fp} (hAcc :
   exact Point.onCurve_of_valid_of_ne_zero
     (Point.valid_add (Point.valid_nsmul (.inl hAcc) 2) (.inl hS)) fun h0 => hc (.inr (.inr h0))
 
-/-- The `x`-test resolved on-curve: `weightedStep` is `⊥` exactly at `P = ±[2]T` or `P + T = 𝒪`. -/
+/-- The `x`-test resolved on-curve: `weightedStep` is `⊥` at `P = ±(2 • T)` and at `P + T = 𝒪`,
+and nowhere else. -/
 theorem weightedStep_eq_of_onCurve {P T : Point Fp} (hP : P.OnCurve) (hT : T.OnCurve) :
     weightedStep P T =
       if P = (2 : ℕ) • T ∨ P = -((2 : ℕ) • T) ∨ P + T = 0 then none else some (P + T) := by
@@ -188,8 +207,8 @@ theorem weightedStep_eq_of_onCurve {P T : Point Fp} (hP : P.OnCurve) (hT : T.OnC
   simp only [weightedStep, x_eq_iff_eq_or_eq_neg hP h2T, or_assoc]
 
 /-- **Per-position theorem**: one weighted step at weight `k` is the specification's step rescaled
-by `[2^k]`, with `⊥` on exactly the same inputs; `two_pow_nsmul_inj` carries each exceptional
-condition across the rescaling. -/
+by `(2^k) •`, `⊥` for `⊥`; `two_pow_nsmul_inj` carries each exceptional condition across the
+rescaling. -/
 theorem weightedStep_eq_step {S : ℕ → Point Fp} {m : ℕ} {acc : Point Fp} (hAcc : acc.OnCurve)
     (hS : (S m).OnCurve) (k : ℕ) :
     weightedStep ((2 ^ (k + 1) : ℕ) • acc) ((2 ^ k : ℕ) • S m) =
@@ -209,8 +228,8 @@ theorem weightedStep_eq_step {S : ℕ → Point Fp} {m : ℕ} {acc : Point Fp} (
 
 /-! ## The chain -/
 
-/-- The invariant `P = [2^|ms|] acc` carried down the chain: induction on `ms` generalising `acc`,
-with `weightedStep_eq_step` at each position and `step_onCurve` to keep the hypothesis. -/
+/-- The invariant `P = (2^|ms|) • acc` carried down the chain: induction on `ms` generalizing
+`acc`, with `weightedStep_eq_step` at each position and `step_onCurve` to keep the hypothesis. -/
 theorem weightedFrom_eq_hashToPoint {S : ℕ → Point Fp} {acc : Point Fp} {ms : List ℕ}
     (hAcc : acc.OnCurve) (hS : ∀ m ∈ ms, (S m).OnCurve) :
     weightedFrom S ((2 ^ ms.length : ℕ) • acc) ms = hashToPoint S acc ms := by
@@ -228,11 +247,11 @@ theorem weightedFrom_eq_hashToPoint {S : ℕ → Point Fp} {acc : Point Fp} {ms 
 /-- **Main theorem**: the weighted evaluator is the specification's function, `⊥` included, for an
 on-curve domain point and on-curve generators at the words consumed.
 
-The hypotheses are necessary rather than convenient. At `Q = 𝒪` or `S m = 𝒪` the specification is
-`⊥` at once (`accZero`, `genZero`), while the weighted chain sees `[2ⁿ] 𝒪 = 𝒪` and `P + 𝒪 = P` and
-carries on; the known domains have `Q ≠ 𝒪`, and group hashing never yields the identity. No bound
-on `words.length` or on the word values is needed, because `S` is total and `q ∤ 2^k`; the Rust
-asserts both. -/
+The hypotheses are necessary. At `Q = 𝒪` or `S m = 𝒪` the specification is `⊥` at once (`accZero`,
+`genZero`), while the weighted chain sees `(2^n) • 𝒪 = 𝒪` and `P + 𝒪 = P` and carries on. The
+known domains have `Q ≠ 𝒪`, and group hashing never yields the identity. No bound on
+`words.length` or on the word values is needed, since `S` is total and `q ∤ 2^k`; the Rust asserts
+both. -/
 theorem weightedHashToPoint_eq_hashToPoint {S : ℕ → Point Fp} {Q : Point Fp}
     {words : List ℕ} (hQ : Q.OnCurve) (hS : ∀ m ∈ words, (S m).OnCurve) :
     weightedHashToPoint S Q words = hashToPoint S Q words :=
@@ -245,8 +264,8 @@ theorem weightedHashToPoint_eq_getLeft?_hashToPointB {S : ℕ → Point Fp} {Q :
     weightedHashToPoint S Q words = (hashToPointB S Q words).getLeft? :=
   (weightedHashToPoint_eq_hashToPoint hQ hS).trans (getLeft?_hashToPointB S Q words).symm
 
-/-- Position 0 alone, the `FIRST_STEPS[m]` row of `src/table.rs` (`None` exactly at
-`weightedStep`'s `⊥`). -/
+/-- Position 0 alone, the `FIRST_STEPS[m]` row of `src/table.rs` (`None` at `weightedStep`'s `⊥`,
+and nowhere else). -/
 theorem weightedHashToPoint_cons (S : ℕ → Point Fp) (Q : Point Fp) (m : ℕ) (ms : List ℕ) :
     weightedHashToPoint S Q (m :: ms) =
       (weightedStep ((2 ^ (ms.length + 1) : ℕ) • Q) ((2 ^ ms.length : ℕ) • S m)).bind

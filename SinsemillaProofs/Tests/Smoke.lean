@@ -8,10 +8,10 @@ import SinsemillaProofs.Jacobian
 Evaluations of the three evaluators on small messages over multiples of the Pallas generator
 `G = (−1, 2)`, kept in the `SmokeCheck` target so they never enter the `SinsemillaProofs` import
 graph. The theorems relate `laneStep` and `jacobianStep` to `weightedStep`, and `weightedStep` to
-the specification; these checks run the definitions as written, and pin the two distinctions a
-type-correct statement could still blur: that a constructed exceptional input is `⊥` on every
-path, and that the Jacobian step hands back a doubling the specification does not treat as `⊥`.
-Each check is a `#guard`, so a failure fails the build.
+the specification. These checks run the definitions as written and pin two distinctions a
+type-correct statement could still blur: a constructed exceptional input is `⊥` on every path,
+and the Jacobian step hands back a doubling the specification does not treat as `⊥`. Each check
+is a `#guard`, so a failure fails the build.
 -/
 
 namespace SinsemillaProofs.Tests.Smoke
@@ -22,7 +22,7 @@ open Zcash.Circuits.Specs.Sinsemilla
 /-- The Pallas generator `(−1, 2)`. -/
 def G : Point Fp := ⟨-1, 2⟩
 
-/-- Generators `S m = [m + 2] G`: distinct multiples, none the identity for small `m`. -/
+/-- Generators `S m = (m + 2) • G`: distinct multiples, none the identity for small `m`. -/
 def S (m : ℕ) : Point Fp := (m + 2) • G
 
 /-- The lockstep path on one lane: `laneStep` per word at the weights `weightedFrom` uses. -/
@@ -41,10 +41,13 @@ def jacobianChain : JacobianPoint → List ℕ → Option JacobianPoint
 
 /-! ## A generic message
 
-Three words from `Q = [11] G`: defined, and the same point on every path. -/
+Three words from `Q = 11 • G`: defined, and the same point on every path. -/
 
+/-- The domain point, `11 • G`. -/
 def Q : Point Fp := (11 : ℕ) • G
+/-- A three-word message. -/
 def words : List ℕ := [0, 1, 2]
+/-- The weighted start `(2^3) • Q`, the `starts[d][n−1]` row. -/
 def start : Point Fp := (2 ^ words.length : ℕ) • Q
 
 -- the weighted evaluator against the specification, and the result defined
@@ -52,7 +55,7 @@ def start : Point Fp := (2 ^ words.length : ℕ) • Q
 #guard (hashToPoint S Q words).isSome
 -- the lockstep lane from the weighted start
 #guard laneChain start words = weightedHashToPoint S Q words
--- the Jacobian accumulator from `Z = 1`, normalised, with `Z ≠ 0` kept
+-- the Jacobian accumulator from `Z = 1`, normalized, with `Z ≠ 0` kept
 #guard (jacobianChain ⟨start.x, start.y, 1⟩ words).map JacobianPoint.affine
   = weightedHashToPoint S Q words
 #guard (jacobianChain ⟨start.x, start.y, 1⟩ words).map (fun p => decide (p.Z ≠ 0)) = some true
@@ -62,7 +65,7 @@ def start : Point Fp := (2 ^ words.length : ℕ) • Q
 /-! ## An exceptional message
 
 `Q = S 0` collides at position 0 (`acc = S m`, the specification's first `⊥` condition; rescaled,
-`P₀ = [2]T₀`), so every path is `⊥`. -/
+`P₀ = 2 • T₀`), so every path is `⊥`. -/
 
 -- the specification and the weighted evaluator
 #guard hashToPoint S (S 0) words = none
@@ -74,8 +77,8 @@ def start : Point Fp := (2 ^ words.length : ℕ) • Q
 
 /-! ## A doubling
 
-One word from `Q = G`, where `S 0 = [2] G = [2] Q`: at weight `0` the accumulator `P = [2] Q`
-equals the addend `T = S 0`. The specification and the lane evaluate it (`[4] G`); the Jacobian
+One word from `Q = G`, where `S 0 = 2 • G = 2 • Q`: at weight `0` the accumulator `P = 2 • Q`
+equals the addend `T = S 0`. The specification and the lane evaluate it (`4 • G`); the Jacobian
 step hands it back, which is the `none ⊋ ⊥` of `jacobianStep_eq_none_iff`. -/
 
 #guard hashToPoint S G [0] = some ((4 : ℕ) • G)

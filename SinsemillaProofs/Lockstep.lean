@@ -4,26 +4,28 @@ import Mathlib.Tactic.LinearCombination
 /-!
 # The lockstep lane and the fused batch inversion
 
-References:
-- `sinsemilla` crate at `elicbarbieri/sinsemilla` commit `6899b8643e48a935b276359434358d9b1ee1989a`
-  (branch `perf/hash-many-vartime`), files `src/table.rs` (`add_in_lockstep`,
-  `TableDomain::hash_many_vartime`) and `src/lib.rs` (`HashDomain::hash_many_vartime`)
-
-`TableDomain::hash_many_vartime` hashes a batch of equal-length messages together. Every message is
-an affine accumulator, a lane, and `add_in_lockstep` advances all lanes by one word with a single
-field inversion, Montgomery's trick fused into its two passes. `laneStep` is the per-lane branch
-structure of that function on raw affine coordinates, with the tests in the Rust's order: the
-`x`-test against the doubled entry, then the chord when the `x`-coordinates differ, then the
-tangent when the lane *is* the addend (an ordinary doubling, which the specification does not treat
-as `⊥`), and `⊥` when it is the addend's negation. `batchInverses` is the fused Montgomery trick
-over the live lanes' denominators, in order.
+`TableDomain::hash_many_vartime` hashes a batch of equal-length messages together. Every message
+is an affine accumulator, a lane, and `add_in_lockstep` advances all lanes by one word with a
+single field inversion, Montgomery's trick fused into its two passes. `laneStep` is the per-lane
+branch structure of that function on raw affine coordinates, with the tests in the Rust's order:
+the `x`-test against the doubled entry, then the chord when the `x`-coordinates differ, then the
+tangent when the lane *is* the addend (an ordinary doubling, not `⊥` in the specification), and
+`⊥` when it is the addend's negation. `batchInverses` is the fused Montgomery trick over the live
+lanes' denominators, in order.
 
 Together the two results say that each live lane receives its own denominator's inverse and then
-computes `weightedStep`; a lane that is already `⊥` stays `⊥`, which is the Rust's `continue` and
-this model's `Option.bind`. Not modelled: the dispatch between this path and the Jacobian one at
+computes `weightedStep`. A lane that is already `⊥` stays `⊥`: the Rust's `continue`, this
+model's `Option.bind`. Not modeled: the dispatch between this path and the Jacobian one at
 `LOCKSTEP_LANES`, which selects between two evaluators both proved here, and the fallback of
 `HashDomain::hash_many_vartime` to `accumulate` for untabled domains and uncovered lengths, which
-is the specification's own recurrence rather than the weighted evaluator.
+is the specification's own recurrence.
+
+## References
+
+- `sinsemilla` crate, zcash/sinsemilla#9 head `596e662ebf917edd3bfe0b0d0f1a5d984969e393`, as
+  carried by `elicbarbieri/sinsemilla` at `6899b8643e48a935b276359434358d9b1ee1989a` (branch
+  `perf/hash-many-vartime`), files `src/table.rs` (`add_in_lockstep`,
+  `TableDomain::hash_many_vartime`) and `src/lib.rs` (`HashDomain::hash_many_vartime`)
 -/
 
 namespace SinsemillaProofs
@@ -32,7 +34,7 @@ open Zcash.Circuits
 open CompElliptic.CurveForms
 
 /-- One lockstep lane, `lane + addend`, with the tests in the Rust's order: `⊥` when
-`lane.x = doubledX` (`doubled[j].x`, the `x` of `[2]·addend`); the chord with denominator
+`lane.x = doubledX` (`doubled[j].x`, the `x` of `2 • addend`); the chord with denominator
 `addend.x − lane.x` when the `x`-coordinates differ; the tangent `3x² / 2y` (Pallas has `a = 0`)
 when `lane = addend`; and `⊥` otherwise, where `lane = −addend`. -/
 def laneStep (lane addend : Point Fp) (doubledX : Fp) : Option (Point Fp) :=
@@ -47,6 +49,7 @@ def laneStep (lane addend : Point Fp) (doubledX : Fp) : Option (Point Fp) :=
     some ⟨x₃, l * (lane.x - x₃) - lane.y⟩
   else none
 
+/-- `2 • T = T + T` by unfolding, so the tangent branch can be read as a doubling. -/
 private theorem two_nsmul_eq_add_self (T : Point Fp) : (2 : ℕ) • T = T + T := by
   simp only [Point.nsmul_def, ShortWeierstrass.smul, ShortWeierstrass.zero_add, Point.add_def]
 
@@ -97,6 +100,8 @@ total product, and the return is the backward pass (`inverse_here = inverse · p
 `inverse *= denominator`). -/
 def batchInverses (ds : List Fp) : List Fp := (batchInverses.go 1 ds).2
 
+/-- The slot-by-slot invariant behind `batchInverses_eq`: with every denominator non-zero, `go`
+returns the inverse of the product so far and the pointwise inverses of the slots after it. -/
 theorem batchInverses_go {before : Fp} (hb : before ≠ 0) {ds : List Fp}
     (h : ∀ d ∈ ds, d ≠ 0) : batchInverses.go before ds = (before⁻¹, ds.map (·⁻¹)) := by
   induction ds generalizing before with
