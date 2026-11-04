@@ -18,10 +18,30 @@ reaches them (finding one is a discrete-log relation, Theorem 5.4.4), so a wrong
 every test while the function silently differs from the specification. Merkle roots feed consensus
 (Zebra's anchors), so the bar is equality as functions. That is what these proofs establish.
 
+## How the proof goes
+
+The specification's step is `Accᵢ = (Accᵢ₋₁ ⸭ S(mᵢ)) ⸭ Accᵢ₋₁`, which is `[2]Accᵢ₋₁ + S(mᵢ)` with
+⊥ exactly when `Accᵢ₋₁ = ±S(mᵢ)` or the sum is `𝒪` (Theorem 5.4.4, restated as a computation in
+`step_eq_of_onCurve`). The weighted evaluator keeps `Pᵢ = [2^(n−i)] Accᵢ` instead and adds
+`Tᵢ = [2^(n−1−i)] S(mᵢ)` each position. Pallas has odd prime order `q`, so `q ∤ 2^k`
+(`not_dvd_two_pow`), `[2^k]` is injective on the group (`two_pow_nsmul_inj`), and it never sends
+a curve point to `𝒪` (`two_pow_nsmul_onCurve`). Scaling each of the three ⊥ conditions by
+`[2^(n−i+1)]` is therefore an equivalence, not an approximation: `Accᵢ₋₁ = ±S` becomes
+`P = ±[2]T`, which is one `x`-coordinate test because `x(P) = x(X)` iff `P = ±X` on the curve
+(`x_eq_iff_eq_or_eq_neg`), and `S = −[2]Accᵢ₋₁` becomes `P + T = 𝒪`. That is
+`weightedStep_eq_step`: one weighted position at weight `k` is the specification's step with both
+sides scaled by `[2^k]`, ⊥ for ⊥. An induction over the chunks with the invariant
+`P = [2^|remaining|] Acc` (`weightedFrom_eq_hashToPoint`) gives the main theorem.
+
+The two batched paths are then shown to compute `weightedStep` on raw coordinates: the lockstep
+lane by matching its four branches against `ShortWeierstrass.add` (`laneStep_eq_weightedStep`),
+and the Jacobian step by reparametrising `X` as `T.x·Z² − h` so that every `madd-2007-bl`
+denominator is a power of `2·Z·h` (`affine_jacobianStep`).
+
 ## What is proved
 
 The Rust is the `sinsemilla` crate at `elicbarbieri/sinsemilla` commit
-`eb3e2f50ef363774169ae8f8877712689e654674` (branch `perf/hash-many-vartime`: zcash/sinsemilla#9
+`6899b8643e48a935b276359434358d9b1ee1989a` (branch `perf/hash-many-vartime`: zcash/sinsemilla#9
 head `596e662` plus four commits); Ironwood is `daira/ironwood` at
 `86e3c7026db8c9af27ca731e6b5c7f2d8fc7f0fc`.
 
@@ -42,6 +62,30 @@ through the main theorem. Not covered, by design: `HashDomain::hash_many_vartime
 and `hash_words` fall back to `accumulate`, the specification's own recurrence, for untabled
 domains, `N = 0`, and `N` past `LONGEST_MESSAGE_WORDS`; that path is the specification, not the
 weighted evaluator, and is not modelled.
+
+## Checking the model against the Rust
+
+Nothing here reads the Rust, so the one thing a reviewer must check by eye is that each Lean
+definition is a transcription of the Rust branch structure. Every test is listed below; the
+arithmetic between tests is the same formula on both sides.
+
+| Rust (`src/table.rs` unless noted) | Test | Lean |
+|---|---|---|
+| `TableDomain::hash_to_point`, loop body | `has_x_of(acc, doubled)` then `acc.is_identity()` after `acc += addend` | `weightedStep`: `P.x = ([2]T).x ∨ P + T = 0` |
+| `TableDomain::hash_to_point`, start and addends | `starts[d][n−1]`, `generators[n−1−i][word]`, `generators[n−i][word]` | `weightedHashToPoint`: `[2ⁿ]Q`; `weightedFrom`: `T = [2^|ms|] S m`, tested against `[2]T` |
+| `add_in_lockstep`, forward pass | `x == doubled[j].x` → lane `None` | `laneStep`, first branch → `none` |
+| | `x != addend.x` → denominator `addend.x − x` | second branch: chord `(addend.y − lane.y) / (addend.x − lane.x)` |
+| | `y == addend.y` → denominator `2y`, slope `3x²·inverse` | third branch: tangent `3x² / 2y` |
+| | otherwise → lane `None` | fourth branch → `none` |
+| `add_in_lockstep`, both passes | `product *= denominator`; one `invert_vartime`; `inverse * product_before`, `inverse *= denominator` | `batchInverses.go`: descent, base case, return |
+| `Jacobian::step` | `x == doubled.x * zz` → `None` | `jacobianStep`, first `if` |
+| | `h == 0` where `h = addend.x * zz − x` → `None` | second `if` |
+| | `madd-2007-bl`, `z₃ = (z + h)² − zz − hh` | the `some` branch |
+| `TableDomain::hash_each_vartime` | accumulator `None` → rerun through `hash_to_point` | `jacobianStep_none_of_weightedStep_none`, `jacobianStep_eq_none_iff` |
+| `first_steps` | `start_x == doubled.x \|\| sum.is_identity()` → entry `None` | `weightedHashToPoint_cons` |
+
+The Rust docstrings name the theorem that covers each function, so the two can be read side by
+side.
 
 Each module's docstring states what it models, with references, and what it leaves out and why.
 `SinsemillaProofs/Tests/Smoke.lean` runs the evaluators on concrete points (a generic message, a
@@ -107,7 +151,7 @@ from a default target (so a module no target builds cannot pass by never being e
 
 ## License
 
-Copyright 2026 Eli Barbieri.
+Copyright 2026 the sinsemilla-proofs contributors.
 
 All code in this repository is licensed under either of
 

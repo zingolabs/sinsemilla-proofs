@@ -5,7 +5,7 @@ import Mathlib.Tactic.LinearCombination
 # The lockstep lane and the fused batch inversion
 
 References:
-- `sinsemilla` crate at `elicbarbieri/sinsemilla` commit `eb3e2f50ef363774169ae8f8877712689e654674`
+- `sinsemilla` crate at `elicbarbieri/sinsemilla` commit `6899b8643e48a935b276359434358d9b1ee1989a`
   (branch `perf/hash-many-vartime`), files `src/table.rs` (`add_in_lockstep`,
   `TableDomain::hash_many_vartime`) and `src/lib.rs` (`HashDomain::hash_many_vartime`)
 

@@ -8,7 +8,7 @@ import Mathlib.Tactic.NormNum
 References:
 - Zcash protocol specification §5.4.1.9 (`SinsemillaHashToPoint`) and Theorem 5.4.4 (when the
   incomplete additions along the hash chain are defined)
-- `sinsemilla` crate at `elicbarbieri/sinsemilla` commit `eb3e2f50ef363774169ae8f8877712689e654674`
+- `sinsemilla` crate at `elicbarbieri/sinsemilla` commit `6899b8643e48a935b276359434358d9b1ee1989a`
   (branch `perf/hash-many-vartime`: zcash/sinsemilla#9 head `596e662` plus four commits), file
   `src/table.rs` (`TableDomain::hash_to_point`, `FIRST_STEPS`)
 - Ironwood at `86e3c7026db8c9af27ca731e6b5c7f2d8fc7f0fc`, modules `Zcash.Circuits.Specs.Sinsemilla`
