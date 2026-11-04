@@ -43,7 +43,7 @@ power of `2·Z·h` (`affine_jacobianStep`).
 ## What is proved
 
 The Rust is the `sinsemilla` crate at zcash/sinsemilla#9, head
-`596e662ebf917edd3bfe0b0d0f1a5d984969e393`, as carried by the fork `elicbarbieri/sinsemilla` at
+`596e662ebf917edd3bfe0b0d0f1a5d984969e393`, as carried by the fork `zingolabs/sinsemilla` at
 `09b92cf4e87bb3f5a803053d457f6604d1a1dce5` (branch `perf/hash-many-vartime`), which adds four
 commits on that head. Ironwood is `daira/ironwood` at `86e3c7026db8c9af27ca731e6b5c7f2d8fc7f0fc`.
 
