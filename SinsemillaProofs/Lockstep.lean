@@ -10,7 +10,7 @@ References:
   `TableDomain::hash_many_vartime`) and `src/lib.rs` (`HashDomain::hash_many_vartime`)
 
 `TableDomain::hash_many_vartime` hashes a batch of equal-length messages together. Every message is
-an affine accumulator, a lane, and `add_in_lockstep` advances all lanes by one chunk with a single
+an affine accumulator, a lane, and `add_in_lockstep` advances all lanes by one word with a single
 field inversion, Montgomery's trick fused into its two passes. `laneStep` is the per-lane branch
 structure of that function on raw affine coordinates, with the tests in the Rust's order: the
 `x`-test against the doubled entry, then the chord when the `x`-coordinates differ, then the

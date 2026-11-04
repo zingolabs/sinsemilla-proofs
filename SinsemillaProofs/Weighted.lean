@@ -14,13 +14,13 @@ References:
 - Ironwood at `86e3c7026db8c9af27ca731e6b5c7f2d8fc7f0fc`, modules `Zcash.Circuits.Specs.Sinsemilla`
   (`hashToPoint`, `step`) and `Zcash.Circuits.Specs.SinsemillaBreak` (`hashToPointB`)
 
-The table evaluator never forms the specification's accumulators `Accᵢ`. For an `n`-chunk message
+The table evaluator never forms the specification's accumulators `Accᵢ`. For an `n`-word message
 it keeps the position-weighted prefix `Pᵢ = [2^(n−i)] Accᵢ`, starting from `P₀ = [2ⁿ] Q`
 (`starts[d][n−1]`) and adding one table entry `Tᵢ = [2^(n−1−i)] S(mᵢ)` (`generators[n−1−i][mᵢ]`)
-per chunk, so the doubling inside each specification step is absorbed into the weights and every
+per word, so the doubling inside each specification step is absorbed into the weights and every
 position costs one addition. This module models that at the group level: the table rows are the
 multiples `[2^w] S m` of an arbitrary generator map `S : ℕ → Point Fp`, and the start table is
-`[2ⁿ] Q`. The Rust calls the chunks "words"; the specification's word is used here.
+`[2ⁿ] Q`. The `K`-bit groups of a message are words, the term the specification and halo2 use.
 
 The exceptional cases are the specification's, rescaled. Theorem 5.4.4 makes the step `⊥` exactly
 when `Acc = ±S(m)` or `[2]Acc + S(m) = 𝒪`. Multiplying through by `[2^(n−i)]` turns the first pair
@@ -37,7 +37,7 @@ statements, and break data stays `hashToPointB`'s job; the corollary
 
 Out of scope, by design: the contents of the tables (that `generators[w][j]` is `[2^w] S(j)` and
 `starts[d][n−1]` is `[2ⁿ] Q` is tested in the crate against group hashing, not proved here), the
-packing of message bits into chunks and the `< 2^K` assertion on each, and the correspondence
+packing of message bits into words and the `< 2^K` assertion on each, and the correspondence
 between the Rust and this model, which the crate's differential tests pin from both sides.
 -/
 
@@ -53,7 +53,7 @@ open CompElliptic.Fields.Pasta (PALLAS_SCALAR_CARD PALLAS_SCALAR_is_prime)
 def weightedStep (P T : Point Fp) : Option (Point Fp) :=
   if P.x = ((2 : ℕ) • T).x ∨ P + T = 0 then none else some (P + T)
 
-/-- The weighted chain from `P` with the chunks `ms` still to hash: the position with `ms` remaining
+/-- The weighted chain from `P` with the words `ms` still to hash: the position with `ms` remaining
 adds `T = [2^|ms|] S m` (`generators[n−1−i][m]`) and tests against `[2]T` (`generators[n−i][m]`). -/
 def weightedFrom (S : ℕ → Point Fp) : Point Fp → List ℕ → Option (Point Fp)
   | P, [] => some P
@@ -61,10 +61,10 @@ def weightedFrom (S : ℕ → Point Fp) : Point Fp → List ℕ → Option (Poin
     (weightedStep P ((2 ^ ms.length : ℕ) • S m)).bind fun acc => weightedFrom S acc ms
 
 /-- Position-weighted `SinsemillaHashToPoint`: start at `[2ⁿ] Q` (`starts[d][n−1]`) and add one
-weighted generator per chunk. -/
-def weightedHashToPoint (S : ℕ → Point Fp) (Q : Point Fp) (chunks : List ℕ) :
+weighted generator per word. -/
+def weightedHashToPoint (S : ℕ → Point Fp) (Q : Point Fp) (words : List ℕ) :
     Option (Point Fp) :=
-  weightedFrom S ((2 ^ chunks.length : ℕ) • Q) chunks
+  weightedFrom S ((2 ^ words.length : ℕ) • Q) words
 
 /-! ## Pallas group facts
 
@@ -226,24 +226,24 @@ theorem weightedFrom_eq_hashToPoint {S : ℕ → Point Fp} {acc : Point Fp} {ms 
         fun m' hm' => hS m' (List.mem_cons_of_mem m hm')
 
 /-- **Main theorem**: the weighted evaluator is the specification's function, `⊥` included, for an
-on-curve domain point and on-curve generators at the chunks consumed.
+on-curve domain point and on-curve generators at the words consumed.
 
 The hypotheses are necessary rather than convenient. At `Q = 𝒪` or `S m = 𝒪` the specification is
 `⊥` at once (`accZero`, `genZero`), while the weighted chain sees `[2ⁿ] 𝒪 = 𝒪` and `P + 𝒪 = P` and
 carries on; the known domains have `Q ≠ 𝒪`, and group hashing never yields the identity. No bound
-on `chunks.length` or on the chunk values is needed, because `S` is total and `q ∤ 2^k`; the Rust
+on `words.length` or on the word values is needed, because `S` is total and `q ∤ 2^k`; the Rust
 asserts both. -/
 theorem weightedHashToPoint_eq_hashToPoint {S : ℕ → Point Fp} {Q : Point Fp}
-    {chunks : List ℕ} (hQ : Q.OnCurve) (hS : ∀ m ∈ chunks, (S m).OnCurve) :
-    weightedHashToPoint S Q chunks = hashToPoint S Q chunks :=
+    {words : List ℕ} (hQ : Q.OnCurve) (hS : ∀ m ∈ words, (S m).OnCurve) :
+    weightedHashToPoint S Q words = hashToPoint S Q words :=
   weightedFrom_eq_hashToPoint hQ hS
 
 /-- The join with Ironwood's Σ-refinement: forgetting `hashToPointB`'s break data gives the
 weighted evaluator, by the main theorem and the projection lemma `getLeft?_hashToPointB`. -/
 theorem weightedHashToPoint_eq_getLeft?_hashToPointB {S : ℕ → Point Fp} {Q : Point Fp}
-    {chunks : List ℕ} (hQ : Q.OnCurve) (hS : ∀ m ∈ chunks, (S m).OnCurve) :
-    weightedHashToPoint S Q chunks = (hashToPointB S Q chunks).getLeft? :=
-  (weightedHashToPoint_eq_hashToPoint hQ hS).trans (getLeft?_hashToPointB S Q chunks).symm
+    {words : List ℕ} (hQ : Q.OnCurve) (hS : ∀ m ∈ words, (S m).OnCurve) :
+    weightedHashToPoint S Q words = (hashToPointB S Q words).getLeft? :=
+  (weightedHashToPoint_eq_hashToPoint hQ hS).trans (getLeft?_hashToPointB S Q words).symm
 
 /-- Position 0 alone, the `FIRST_STEPS[m]` row of `src/table.rs` (`None` exactly at
 `weightedStep`'s `⊥`). -/

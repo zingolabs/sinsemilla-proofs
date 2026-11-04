@@ -11,7 +11,7 @@ themselves, and the theorems say they equal the specification as functions.
 ## Why
 
 The specification computes `Accᵢ = (Accᵢ₋₁ ⸭ S(mᵢ)) ⸭ Accᵢ₋₁` with incomplete addition. The table
-evaluators never form `Accᵢ`; they compute `Pᵢ = [2^(n−i)] Accᵢ` (one addition per chunk) and
+evaluators never form `Accᵢ`; they compute `Pᵢ = [2^(n−i)] Accᵢ` (one addition per word) and
 test Theorem 5.4.4's conditions rescaled onto `P`. Equality with the specification in the generic
 case is checked by differential tests on random inputs. The ⊥ cases cannot be: no real input
 reaches them (finding one is a discrete-log relation, Theorem 5.4.4), so a wrong ⊥ rule passes
@@ -30,7 +30,7 @@ a curve point to `𝒪` (`two_pow_nsmul_onCurve`). Scaling each of the three ⊥
 `P = ±[2]T`, which is one `x`-coordinate test because `x(P) = x(X)` iff `P = ±X` on the curve
 (`x_eq_iff_eq_or_eq_neg`), and `S = −[2]Accᵢ₋₁` becomes `P + T = 𝒪`. That is
 `weightedStep_eq_step`: one weighted position at weight `k` is the specification's step with both
-sides scaled by `[2^k]`, ⊥ for ⊥. An induction over the chunks with the invariant
+sides scaled by `[2^k]`, ⊥ for ⊥. An induction over the words with the invariant
 `P = [2^|remaining|] Acc` (`weightedFrom_eq_hashToPoint`) gives the main theorem.
 
 The two batched paths are then shown to compute `weightedStep` on raw coordinates: the lockstep
@@ -119,7 +119,7 @@ What is trusted, and not proved here:
 3. The table contents: that `generators[w][j]` is `[2^w] S(j)` and `starts[d][n−1]` is `[2ⁿ] Q`
    (tested in the crate against group hashing), together with `pasta_curves`' Jacobian arithmetic
    inside `hash_to_point` (`+=`, `has_x_of`'s `X = x·Z²`), the field arithmetic and
-   `invert_vartime`, chunk packing and the `< 2^K` / length assertions, and the dispatch between
+   `invert_vartime`, word packing and the `< 2^K` / length assertions, and the dispatch between
    the lockstep and Jacobian paths at `LOCKSTEP_LANES`.
 
 ## Verifying the proofs

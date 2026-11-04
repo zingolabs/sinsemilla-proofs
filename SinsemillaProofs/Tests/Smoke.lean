@@ -25,14 +25,14 @@ def G : Point Fp := ⟨-1, 2⟩
 /-- Generators `S m = [m + 2] G`: distinct multiples, none the identity for small `m`. -/
 def S (m : ℕ) : Point Fp := (m + 2) • G
 
-/-- The lockstep path on one lane: `laneStep` per chunk at the weights `weightedFrom` uses. -/
+/-- The lockstep path on one lane: `laneStep` per word at the weights `weightedFrom` uses. -/
 def laneChain : Point Fp → List ℕ → Option (Point Fp)
   | P, [] => some P
   | P, m :: ms =>
     let T := (2 ^ ms.length : ℕ) • S m
     (laneStep P T ((2 : ℕ) • T).x).bind fun acc => laneChain acc ms
 
-/-- The Jacobian path: `jacobianStep` per chunk at the same weights. -/
+/-- The Jacobian path: `jacobianStep` per word at the same weights. -/
 def jacobianChain : JacobianPoint → List ℕ → Option JacobianPoint
   | p, [] => some p
   | p, m :: ms =>
@@ -41,21 +41,21 @@ def jacobianChain : JacobianPoint → List ℕ → Option JacobianPoint
 
 /-! ## A generic message
 
-Three chunks from `Q = [11] G`: defined, and the same point on every path. -/
+Three words from `Q = [11] G`: defined, and the same point on every path. -/
 
 def Q : Point Fp := (11 : ℕ) • G
-def chunks : List ℕ := [0, 1, 2]
-def start : Point Fp := (2 ^ chunks.length : ℕ) • Q
+def words : List ℕ := [0, 1, 2]
+def start : Point Fp := (2 ^ words.length : ℕ) • Q
 
 -- the weighted evaluator against the specification, and the result defined
-#guard weightedHashToPoint S Q chunks = hashToPoint S Q chunks
-#guard (hashToPoint S Q chunks).isSome
+#guard weightedHashToPoint S Q words = hashToPoint S Q words
+#guard (hashToPoint S Q words).isSome
 -- the lockstep lane from the weighted start
-#guard laneChain start chunks = weightedHashToPoint S Q chunks
+#guard laneChain start words = weightedHashToPoint S Q words
 -- the Jacobian accumulator from `Z = 1`, normalised, with `Z ≠ 0` kept
-#guard (jacobianChain ⟨start.x, start.y, 1⟩ chunks).map JacobianPoint.affine
-  = weightedHashToPoint S Q chunks
-#guard (jacobianChain ⟨start.x, start.y, 1⟩ chunks).map (fun p => decide (p.Z ≠ 0)) = some true
+#guard (jacobianChain ⟨start.x, start.y, 1⟩ words).map JacobianPoint.affine
+  = weightedHashToPoint S Q words
+#guard (jacobianChain ⟨start.x, start.y, 1⟩ words).map (fun p => decide (p.Z ≠ 0)) = some true
 -- the fused batch inversion
 #guard batchInverses [3, 5, 7] = [3⁻¹, 5⁻¹, 7⁻¹]
 
@@ -65,16 +65,16 @@ def start : Point Fp := (2 ^ chunks.length : ℕ) • Q
 `P₀ = [2]T₀`), so every path is `⊥`. -/
 
 -- the specification and the weighted evaluator
-#guard hashToPoint S (S 0) chunks = none
-#guard weightedHashToPoint S (S 0) chunks = none
+#guard hashToPoint S (S 0) words = none
+#guard weightedHashToPoint S (S 0) words = none
 -- the lockstep lane and the Jacobian accumulator
-#guard laneChain ((2 ^ chunks.length : ℕ) • S 0) chunks = none
-#guard (jacobianChain ⟨((2 ^ chunks.length : ℕ) • S 0).x, ((2 ^ chunks.length : ℕ) • S 0).y, 1⟩
-  chunks).isNone
+#guard laneChain ((2 ^ words.length : ℕ) • S 0) words = none
+#guard (jacobianChain ⟨((2 ^ words.length : ℕ) • S 0).x, ((2 ^ words.length : ℕ) • S 0).y, 1⟩
+  words).isNone
 
 /-! ## A doubling
 
-One chunk from `Q = G`, where `S 0 = [2] G = [2] Q`: at weight `0` the accumulator `P = [2] Q`
+One word from `Q = G`, where `S 0 = [2] G = [2] Q`: at weight `0` the accumulator `P = [2] Q`
 equals the addend `T = S 0`. The specification and the lane evaluate it (`[4] G`); the Jacobian
 step hands it back, which is the `none ⊋ ⊥` of `jacobianStep_eq_none_iff`. -/
 
