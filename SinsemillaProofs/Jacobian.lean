@@ -1,7 +1,7 @@
-import SinsemillaProofs.Weighted
 import Mathlib.Tactic.FieldSimp
 import Mathlib.Tactic.LinearCombination
 import Mathlib.Tactic.Ring
+import SinsemillaProofs.Weighted
 
 /-!
 # The Jacobian accumulator step
@@ -42,6 +42,7 @@ structure JacobianPoint where
   X : Fp
   Y : Fp
   Z : Fp
+deriving DecidableEq, Repr
 
 /-- The affine view `(X / Z², Y / Z³)`. -/
 def JacobianPoint.affine (p : JacobianPoint) : Point Fp := ⟨p.X / p.Z ^ 2, p.Y / p.Z ^ 3⟩
@@ -70,7 +71,7 @@ theorem jacobianStep_eq_none_iff {p : JacobianPoint} {T : Point Fp} (hZ : p.Z �
       p.affine.x = ((2 : ℕ) • T).x ∨ p.affine.x = T.x := by
   simp only [jacobianStep, JacobianPoint.affine, div_eq_iff (pow_ne_zero 2 hZ),
     sub_eq_zero.trans eq_comm]
-  split_ifs <;> simp [*]
+  split_ifs with h1 h2 <;> simp_all
 
 /-- Both soundness facts at once, from one reparameterization of `X` stepped through in the body;
 the exported statements are the projections `jacobianStep_Z_ne_zero` and `affine_jacobianStep`. -/
@@ -91,14 +92,14 @@ private theorem jacobianStep_sound {p p' : JacobianPoint} {T : Point Fp} (hZ : p
   have hT0 : T ≠ 0 := Point.ne_zero_of_onCurve hT
   have hsum : P + T ≠ 0 := Point.nondegenerateAdd_eq_add hP0 hT0 hx ▸
     Point.ne_zero_of_onCurve (Point.nondegenerateAdd_onCurve hP hT hx)
-  rw [show (Z + h') ^ 2 - Z ^ 2 - h' ^ 2 = 2 * Z * h' by ring]
+  rw [show (Z + h') ^ 2 - Z ^ 2 - h' ^ 2 = 2 * Z * h' from by ring]
   refine ⟨mul_ne_zero (mul_ne_zero two_ne_zero hZ) h2, ?_⟩
   rw [weightedStep, if_neg (not_or.mpr ⟨h1', hsum⟩), Option.some.injEq,
     ← Point.nondegenerateAdd_eq_add hP0 hT0 hx]
-  have hlam : T.x - (T.x * Z ^ 2 - h') / Z ^ 2 = h' / Z ^ 2 := by field_simp; ring
   have htwo : (2 : Fp) ≠ 0 := two_ne_zero
+  have hlam : T.x - (T.x * Z ^ 2 - h') / Z ^ 2 = h' / Z ^ 2 := by field_simp [hzz]; ring
   simp only [Point.nondegenerateAdd, hPdef, JacobianPoint.affine, Point.mk.injEq, hlam, inv_div]
-  constructor <;> (field_simp; ring)
+  constructor <;> (field_simp [hzz, htwo]; ring)
 
 /-- **Soundness, the invariant**: a returned step keeps `Z ≠ 0`, so the shared inversion in
 `hash_each_vartime` is over non-zero `Z`s. -/

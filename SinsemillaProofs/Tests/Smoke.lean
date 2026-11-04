@@ -72,8 +72,8 @@ def start : Point Fp := (2 ^ words.length : ℕ) • Q
 #guard weightedHashToPoint S (S 0) words = none
 -- the lockstep lane and the Jacobian accumulator
 #guard laneChain ((2 ^ words.length : ℕ) • S 0) words = none
-#guard (jacobianChain ⟨((2 ^ words.length : ℕ) • S 0).x, ((2 ^ words.length : ℕ) • S 0).y, 1⟩
-  words).isNone
+#guard jacobianChain ⟨((2 ^ words.length : ℕ) • S 0).x, ((2 ^ words.length : ℕ) • S 0).y, 1⟩
+  words = none
 
 /-! ## A doubling
 
@@ -84,6 +84,6 @@ step hands it back, which is the `none ⊋ ⊥` of `jacobianStep_eq_none_iff`. -
 #guard hashToPoint S G [0] = some ((4 : ℕ) • G)
 #guard weightedHashToPoint S G [0] = some ((4 : ℕ) • G)
 #guard laneChain ((2 : ℕ) • G) [0] = some ((4 : ℕ) • G)
-#guard (jacobianChain ⟨((2 : ℕ) • G).x, ((2 : ℕ) • G).y, 1⟩ [0]).isNone
+#guard jacobianChain ⟨((2 : ℕ) • G).x, ((2 : ℕ) • G).y, 1⟩ [0] = none
 
 end SinsemillaProofs.Tests.Smoke

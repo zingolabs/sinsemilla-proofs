@@ -1,6 +1,6 @@
-import Zcash.Circuits.Specs.SinsemillaBreak
 import Mathlib.Tactic.Abel
 import Mathlib.Tactic.NormNum
+import Zcash.Circuits.Specs.SinsemillaBreak
 
 /-!
 # Position-weighted Sinsemilla as the specification's `hashToPoint`
@@ -203,7 +203,7 @@ and nowhere else. -/
 theorem weightedStep_eq_of_onCurve {P T : Point Fp} (hP : P.OnCurve) (hT : T.OnCurve) :
     weightedStep P T =
       if P = (2 : ℕ) • T ∨ P = -((2 : ℕ) • T) ∨ P + T = 0 then none else some (P + T) := by
-  have h2T : ((2 : ℕ) • T).OnCurve := by simpa using two_pow_nsmul_onCurve hT 1
+  have h2T : ((2 : ℕ) • T).OnCurve := pow_one (2 : ℕ) ▸ two_pow_nsmul_onCurve hT 1
   simp only [weightedStep, x_eq_iff_eq_or_eq_neg hP h2T, or_assoc]
 
 /-- **Per-position theorem**: one weighted step at weight `k` is the specification's step rescaled

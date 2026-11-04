@@ -1,5 +1,5 @@
-import SinsemillaProofs.Weighted
 import Mathlib.Tactic.LinearCombination
+import SinsemillaProofs.Weighted
 
 /-!
 # The lockstep lane and the fused batch inversion
@@ -84,26 +84,31 @@ theorem laneStep_eq_weightedStep {P T : Point Fp} (hP : P.OnCurve) (hT : T.OnCur
     rw [if_pos hx, if_neg hsum, ← Point.nondegenerateAdd_eq_add hP0 hT0 hx]
     simp only [Point.nondegenerateAdd, div_eq_mul_inv, sq]
 
+/-- The backward pass of the fused Montgomery trick as it leaves one slot: the running inverse
+(`inverse`, after `inverse *= denominator`) and the inverses of the slots after it. -/
+structure BackwardPass where
+  inverse : Fp
+  inverses : List Fp
+
 /-- The fused Montgomery trick one slot at a time. `before` is the product of the denominators
-already passed on the forward pass (`product_before`); the result pairs the running inverse once the
-backward pass has passed this slot (`inverse`, after `inverse *= denominator`) with the inverses of
-`ds`. -/
-def batchInverses.go (before : Fp) : List Fp → Fp × List Fp
-  | [] => (before⁻¹, [])
+already passed on the forward pass (`product_before`); the result is the backward pass as it
+leaves this slot. -/
+def batchInverses.go (before : Fp) : List Fp → BackwardPass
+  | [] => ⟨before⁻¹, []⟩
   | d :: ds =>
-    let (inverse, rest) := batchInverses.go (before * d) ds
-    (inverse * d, inverse * before :: rest)
+    let pass := batchInverses.go (before * d) ds
+    ⟨pass.inverse * d, pass.inverse * before :: pass.inverses⟩
 
 /-- The Rust's fused Montgomery trick over the live lanes' denominators, in order: the descent is
 the forward pass (`product *= denominator`), the base case is the single `invert_vartime` of the
 total product, and the return is the backward pass (`inverse_here = inverse · product_before`, then
 `inverse *= denominator`). -/
-def batchInverses (ds : List Fp) : List Fp := (batchInverses.go 1 ds).2
+def batchInverses (ds : List Fp) : List Fp := (batchInverses.go 1 ds).inverses
 
 /-- The slot-by-slot invariant behind `batchInverses_eq`: with every denominator non-zero, `go`
 returns the inverse of the product so far and the pointwise inverses of the slots after it. -/
 theorem batchInverses_go {before : Fp} (hb : before ≠ 0) {ds : List Fp}
-    (h : ∀ d ∈ ds, d ≠ 0) : batchInverses.go before ds = (before⁻¹, ds.map (·⁻¹)) := by
+    (h : ∀ d ∈ ds, d ≠ 0) : batchInverses.go before ds = ⟨before⁻¹, ds.map (·⁻¹)⟩ := by
   induction ds generalizing before with
   | nil => rfl
   | cons d ds ih =>
@@ -115,6 +120,6 @@ theorem batchInverses_go {before : Fp} (hb : before ≠ 0) {ds : List Fp}
 fused trick returns exactly the pointwise inverses. -/
 theorem batchInverses_eq {ds : List Fp} (h : ∀ d ∈ ds, d ≠ 0) :
     batchInverses ds = ds.map (·⁻¹) :=
-  congrArg Prod.snd (batchInverses_go one_ne_zero h)
+  congrArg BackwardPass.inverses (batchInverses_go one_ne_zero h)
 
 end SinsemillaProofs
