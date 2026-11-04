@@ -23,7 +23,7 @@ is the specification's own recurrence.
 ## References
 
 - `sinsemilla` crate, zcash/sinsemilla#9 head `596e662ebf917edd3bfe0b0d0f1a5d984969e393`, as
-  carried by `elicbarbieri/sinsemilla` at `6899b8643e48a935b276359434358d9b1ee1989a` (branch
+  carried by `elicbarbieri/sinsemilla` at `09b92cf4e87bb3f5a803053d457f6604d1a1dce5` (branch
   `perf/hash-many-vartime`), files `src/table.rs` (`add_in_lockstep`,
   `TableDomain::hash_many_vartime`) and `src/lib.rs` (`HashDomain::hash_many_vartime`)
 -/

@@ -37,7 +37,7 @@ differential tests pin from both sides.
   (<https://zips.z.cash/protocol/protocol.pdf#concretesinsemillahash>) and its Theorem 5.4.4
   (when the incomplete additions along the hash chain are defined)
 - `sinsemilla` crate, zcash/sinsemilla#9 head `596e662ebf917edd3bfe0b0d0f1a5d984969e393`, as
-  carried by `elicbarbieri/sinsemilla` at `6899b8643e48a935b276359434358d9b1ee1989a` (branch
+  carried by `elicbarbieri/sinsemilla` at `09b92cf4e87bb3f5a803053d457f6604d1a1dce5` (branch
   `perf/hash-many-vartime`, four commits on that head), file `src/table.rs`
   (`TableDomain::hash_to_point`, `FIRST_STEPS`)
 - Ironwood at `86e3c7026db8c9af27ca731e6b5c7f2d8fc7f0fc`, modules `Zcash.Circuits.Specs.Sinsemilla`
